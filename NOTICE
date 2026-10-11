@@ -1,0 +1,64 @@
+iec60870 (IEC 60870-5-104 and -101 with IEC 62351-5 secure authentication, in Go)
+Copyright 2026 Abhinav Gautam
+
+This module is licensed under the Apache License, Version 2.0 (LICENSE).
+
+The code was written for SigmaM2M, a oneM2M platform, from the IEC
+standards and the other documents listed in PROVENANCE.md. It contains no
+code from other projects. The source files that come from SigmaM2M carry
+no per-file copyright header (the convention of the code they come from);
+the copyright line above covers them. Files added for this module carry
+"Copyright 2026 Abhinav Gautam" and "SPDX-License-Identifier: Apache-2.0".
+
+Specifications
+--------------
+
+IEC 60870-5-104, IEC 60870-5-101 (with their amendments), IEC 60870-5-1,
+-2, -4 and -5, IEC TS 60870-5-7, IEC 62351-3, IEC 62351-5 and IEC 62351-8
+are licensed IEC publications; none is redistributed. Type and cause
+numbers, field layouts, bit positions, timer defaults and ranges, state
+transitions and procedures are facts, written in our own words with
+clause, table and figure references. No text of the standards is
+reproduced. This project is not affiliated with or endorsed by the IEC.
+
+Dependencies
+------------
+
+- github.com/cloudflare/circl v1.6.3 (BSD-3-Clause, Copyright (c) 2019
+  Cloudflare): X448 key agreement (sec).
+- github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 (ISC, Copyright (c)
+  2013-2017 The btcsuite developers, Copyright (c) 2015-2024 The Decred
+  developers): secp256k1 keys and signatures (sec).
+- github.com/goburrow/serial v0.1.0 (MIT, Copyright (c) 2015 Quoc-Viet
+  Nguyen): serial ports (cs101.OpenSerial).
+- golang.org/x/crypto v0.57.0 (BSD-3-Clause, Copyright 2009 The Go
+  Authors): keyed BLAKE2s (sec); golang.org/x/sys comes with it.
+- github.com/cB-Sigma/iotcrypto (Apache-2.0 and, for its brainpool, ccm
+  and bigmod packages, BSD-3-Clause; see its NOTICE): brainpoolP256r1
+  (sec).
+- github.com/cB-Sigma/iotsec (Apache-2.0, Copyright 2026 Abhinav
+  Gautam): the security seams.
+- The Go standard library (BSD-3-Clause, Copyright The Go Authors).
+
+Interop test peer (interop/, not part of the module's packages)
+---------------------------------------------------------------
+
+The nested test-only module interop/ builds lib60870-C v2.4.1
+(https://github.com/mz-automation/lib60870, Copyright MZ Automation GmbH,
+GPLv3 or a commercial licence) with mbedtls 3.6.6 (Apache-2.0 or
+GPL-2.0-or-later) in a Docker container from their sources, together
+with a peer program of ours (interop/peer/peer.c, Apache-2.0) and
+lib60870's own example programs. lib60870 is used only as a test peer:
+no lib60870 or mbedtls source is included in this repository, nothing of
+it is linked into this module, and the container image is built on the
+tester's machine and not distributed.
+
+Test data
+---------
+
+The tests use the octet layouts and worked sequences of the IEC standards
+named in each test, and published RFC vectors: RFC 3394 (AES key wrap),
+RFC 4231 (HMAC-SHA-256), RFC 5869 (HKDF), RFC 7693 (BLAKE2s), RFC 7748
+(X25519, X448) and RFC 7027 (brainpool curve parameters). Every key,
+certificate, address and point value in the tests and the examples is a
+made-up demo value; none belongs to a real installation.
