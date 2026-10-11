@@ -35,7 +35,14 @@ interrogation, reset and test, and `Params.PackedStep` were written from
 the standards named below, three defects those runs found were fixed,
 and a data race on closing a serial port (reported from the dnp3
 library, which uses the same serial package) was fixed (see
-CHANGELOG.md).
+CHANGELOG.md). For v0.3.0 (the same day) the controlled station of the
+simulators (point database, interrogation, commands with
+select-before-operate and return information, the counter freeze and
+reset arithmetic) was lifted into the package `station` and rewritten
+as a library with sessions and handler callbacks, written from the same
+clauses; `gateway` (the 101 to 104 gateway) and `cs101.SharedLine` were
+written then from the standards named below, and the simulators now run
+on `station`.
 
 ## Notes on open readings (F- numbers)
 
@@ -70,6 +77,8 @@ its numbers. Each is explained here in our words:
 | Interop peer (interop/peer) | lib60870-C v2.4.1's public API headers and example programs, read to write our peer program; on 2026-10-11 also its file service, IEC 104 controlled-station dispatch, FT1.2 link layer and mbedtls configuration sources, read to learn how the test peer behaves (no code taken) | the peer program is ours; lib60870 is built from its own sources in the test container |
 | Redundancy groups (cs104/group.go) | IEC 60870-5-104 clause 10 (redundant connections, Figure 36, 10.6 and 10.7) | none |
 | IEC 101 client (cs101/client.go) | IEC 60870-5-101 clause 7.4 and 6.2 (as for the link and the procedures) | none |
+| Controlled station (station/) | IEC 60870-5-101 clause 7.4 (station initialisation, interrogation by groups, counter interrogation modes, command transmission with return information, parameter loading and activation, test, reset, delay acquisition, file transfer) and 7.2 (causes, qualifiers, the test bit); IEC 60870-5-104 clauses 7 to 9 (the types and causes allowed over IEC 104, which excludes the CP24Time2a types; the maximum command delay of Amendment 1); IEC 60870-5-5 clause 6 | none; lib60870's controlled-station handler interface was known from the interop peer program and is not followed |
+| Gateway (gateway/) and shared line (cs101/shared.go) | the same clauses for the station side; IEC 60870-5-101 6.2.1.1 (unbalanced party lines, broadcast address) for the shared line. A gateway's behaviour (mirror for interrogation, data passed up with its cause, commands passed down) is no standard's; it is our design | none |
 
 ## Other IEC 60870-5 implementations
 
@@ -109,7 +118,8 @@ and part5 were read for the comparison in README.md only.
 | sec/crypto_test.go | RFC 3394, RFC 4231, RFC 5869 and RFC 7693 test vectors |
 | sec/cert_test.go, sec/brainpool_test.go | RFC 7748 (X25519, X448) and RFC 7027 (brainpoolP256r1) |
 | fuzz tests (cs104/fuzz_test.go, cs101/fuzz_test.go) | random input from hand-written seed frames |
-| interop/ | lib60870-C v2.4.1 as controlled and as controlling station (IEC 104 with and without TLS, IEC 101 balanced and unbalanced with every field size); the expected values in the tests are our own choices, checked against what lib60870's getters and our decoder read |
+| interop/ | lib60870-C v2.4.1 as controlled and as controlling station (IEC 104 with and without TLS, IEC 101 balanced and unbalanced with every field size), against our `station` and on both sides of our `gateway`; the expected values in the tests are our own choices, checked against what lib60870's getters and our decoder read |
+| station/, gateway/ | our controlling stations (cs104.Client, cs101.Client, cs101.Link) against them in memory, with the expected answers taken from the clauses named above |
 | sec/ (all) | own vectors from the TS 60870-5-7 and IEC 62351-5 message figures, plus RFC vectors for the primitives; no independent A-Profile implementation was available to test against (see README.md) |
 | every other test and the examples | the links and endpoints of this module against each other, written from the same standards; not a real device |
 

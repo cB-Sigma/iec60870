@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.3.0 (2026-10-11)
+
+Added, all backwards compatible:
+
+- Package `station`: the controlled station as a library (until now it
+  lived only in iec60870-sim). `Station` holds `Sector`s, one per common
+  address, of `Point`s and `Control`s and answers station and group
+  interrogation, counter interrogation with freeze and reset, read, clock
+  synchronisation (its clock, `Now`, follows), the test commands, reset
+  process with end of initialisation, delay acquisition, parameters of
+  measured values (the threshold holds back spontaneous reports) and
+  their activation (QPA 3 switches cyclic transmission), and file
+  transfer through a `FileServer`. `Update`, `UpdateObject`, `Event` and
+  `ReturnInfo` report changes; `Run` sends cyclic and background data;
+  `EndOfInit` the end of initialisation. Commands run with
+  select-before-operate (a select is valid for `SelectTimeout` and only
+  for the same type and value), return information, termination,
+  deactivation of a select, the test bit and a maximum command delay,
+  through `Control.Select`, `Execute` and `Cancel` handlers; a `Refusal`
+  error answers with cause 44 to 47. Sessions: `Group` and
+  `PerConnection` for `cs104.Server`, `ServeSecondary` for
+  `cs101.Secondary`, `Attach` for anything else; each has its own queue,
+  so several controlling stations see the same database. IEC 104
+  sessions send CP24Time2a types as their CP56Time2a twins; answers that
+  do not fit one ASDU are split.
+- Package `gateway`: downstream stations, reached through any
+  `iec60870.Peer` (`cs101.Client`, `cs104.Client`), as sectors of one
+  station: the IEC 101 to IEC 104 gateway. Interrogation is answered from
+  the mirror; data goes up with its cause; commands go down with their
+  answers and refusal causes coming back; counter interrogation, reset
+  process, the test commands, delay acquisition, parameters and
+  (optionally) clock synchronisation are passed through; `SetOnline`
+  marks a lost station's points invalid and interrogates it again when
+  it returns.
+- `cs101.SharedLine`: several link addresses of a controlled station on
+  one line, each with its own `Secondary` (a link address per
+  controlling station, or a gateway standing in for several stations).
+- Package `statement`: interoperability statements (IEC 60870-5-101
+  clause 8, IEC 60870-5-104 clause 9) as data: types with their causes,
+  functions, sizes and link parameters; JSON `Read` and `Write`,
+  `Validate` (an IEC 104 statement declares no CP24Time2a type),
+  `Allows` for an ASDU, and `ForStation` from a `station.Station`.
+- `cs104.Group.OnClose`: runs when a connection left the group.
+- Interop tests against lib60870-C v2.4.1 for the new roles: lib60870's
+  IEC 104 and IEC 101 controlling stations against `station`, and a
+  lib60870 IEC 101 station below the gateway with a lib60870 IEC 104
+  controlling station above it (see README.md).
+
 ## v0.2.0 (2026-10-11)
 
 Added, all backwards compatible: existing functions and types keep their

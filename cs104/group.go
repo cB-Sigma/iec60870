@@ -43,6 +43,9 @@ type Group struct {
 	// connection of the group; answers go back with Link.Send on that
 	// connection.
 	OnASDU func(l *Link, asdu []byte)
+	// OnClose, when set, runs after a connection of the group ended and
+	// left it; remaining is how many connections the group still holds.
+	OnClose func(l *Link, remaining int)
 
 	once     sync.Once
 	sendOnce sync.Once
@@ -106,7 +109,11 @@ func (g *Group) Accept(ctx context.Context, conn net.Conn) (*Link, error) {
 		if g.act == l {
 			g.act = nil
 		}
+		n := len(g.links)
 		g.mu.Unlock()
+		if g.OnClose != nil {
+			g.OnClose(l, n)
+		}
 	}()
 	return l, nil
 }
