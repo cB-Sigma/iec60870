@@ -107,6 +107,37 @@ func TestSecondaryUnbalanced(t *testing.T) {
 	}
 }
 
+// A balanced line without a link address field (0 octets): every frame
+// is for station B, whatever its configured address (found against
+// lib60870 2.4.1, whose station A sends no address).
+//
+// Covers: SIG-IPE-1348
+func TestSecondaryBalancedNoAddress(t *testing.T) {
+	a, b := net.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	s := cs101.NewSecondary(cs101.NewPort(a), cs101.SecondaryConfig{LinkAddress: 3, AddrSize: 0, Balanced: true,
+		Timeout: 300 * time.Millisecond, Retries: 2, TestPeriod: time.Hour})
+	done := make(chan struct{})
+	go func() { defer close(done); _ = s.Run(ctx) }()
+	l := cs101.NewLink(cs101.NewPort(b), 0, true, 300*time.Millisecond, 2)
+	defer func() { cancel(); l.Close(); s.Close(); <-done }()
+	if err := l.Start(ctx, 3); err != nil {
+		t.Fatalf("link start without an address field: %v", err)
+	}
+	cmd := asdu(t, iec60870.CScNa1, iec60870.CauseActivation, iec60870.Object{IOA: 200, Value: 1})
+	if err := l.Send(ctx, 3, cmd); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-s.ASDUs():
+		if !bytes.Equal(got, cmd) {
+			t.Errorf("received %x", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("station B did not deliver the user data")
+	}
+}
+
 // Balanced (Figures 8 and 9): station B starts the controlling station's
 // link and sends its data as confirmed user data; the controlling station
 // sends commands the same way.

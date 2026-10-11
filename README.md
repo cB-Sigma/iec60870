@@ -20,8 +20,8 @@ platform, where it serves the IEC 104 and IEC 101 integrations.
 |---|---|
 | ASDU codec: every type of IEC 60870-5-101 Tables 8 to 13, CP56Time2a/CP24Time2a/CP16Time2a, configurable cause, common address and object address sizes, originator address, test and negative bits | yes |
 | IEC 104 APCI: I/S/U formats, modulo-32768 numbering with acknowledgement by N(R) of the frames below it (Amendment 1), k, w, t0 to t3, STARTDT/STOPDT/TESTFR, the start/stop procedure, parameter ranges of 9.6 | yes |
-| IEC 104 controlled-station side of a connection | yes (`cs104.Accept`); the point database and redundancy groups are the application's (see iec60870-sim) |
-| IEC 104 redundancy (edition 2): standby connections, switchover with STOPDT/STARTDT | link primitives yes (`DialStandby`, `StartDT`, `StopDT`, `Unacked`); the group policy is the application's |
+| IEC 104 controlled-station side of a connection | yes (`cs104.Accept`); the point database is the application's (see iec60870-sim) |
+| IEC 104 redundancy (edition 2): standby connections, switchover with STOPDT/STARTDT | controlling station: `DialStandby`, `StartDT`, `StopDT`, `Unacked`; controlled station: `cs104.Group` (one started connection, a shared queue kept across switchover, unacknowledged ASDUs sent again first) and `cs104.Server` (groups chosen by address, or one group per connection); other policies can drive `Accept` themselves |
 | IEC 101 FT1.2, unbalanced polling of several secondaries, balanced operation, busy (DFC), FC14/FC15, FCB repeats, broadcast send/no reply, the 6.2.2 time-out interval (`T0`) | yes |
 | IEC 101 controlled station (`cs101.Secondary`) | yes; one controlling station per line |
 | Commands: single, double, regulating step, set-points, bitstring, with or without CP56Time2a; select-before-operate, direct execute, cancel; termination wait; late confirmations dropped | yes |
@@ -30,7 +30,8 @@ platform, where it serves the IEC 104 and IEC 101 integrations.
 | IEC 62351-5 A-Profile: Station Association, Session Key Change, Secure Data, both roles, statistics, broadcast session key (IEC 101), roles | yes |
 | IEC 62351-5 Association Initiation Request | no (no standard defines its encoding) |
 | IEC 62351-9 enrolment and revocation | hooks only (`SetEnrolment`, `Config.Revoked`) |
-| A Go `Client` for IEC 101 like `cs104.Client` | no; use `cs101.Link` with `iec60870.Commander` |
+| A `Client` for IEC 101 like `cs104.Client` | yes (`cs101.Client`: polls an unbalanced station or reads a balanced one; commands, procedures, files) |
+| Packed single points in sequences (M_PS_NA_1, SQ=1) | addresses 16 apart by default (Amendment 1); `Params.PackedStep` 1 reads them one apart, as lib60870 and some stations send them |
 | Interoperability statements (IEC 60870-5-104 clause 9, -101 clause 8) | no; they belong to an application |
 
 Security services come in through
@@ -55,20 +56,19 @@ Check the projects themselves before relying on a row.
 |---|---|---|---|---|---|
 | Language | Go, no cgo | C (C# version separate) | Go | Go | Go |
 | Licence | Apache-2.0 | GPLv3 or commercial | LGPL-3.0 (some file headers say GPLv3) | Apache-2.0 (built on a fork of go-iecp5, LGPL-3.0) | public domain (CC0-style waiver) |
-| IEC 104 controlling and controlled station | both (tested against lib60870) | both | both | both, as wrappers over go-iecp5 | an IEC 104 session layer (`session.TCP`) and the iecat tool |
-| IEC 101 link | both sides, balanced and unbalanced (unbalanced tested against lib60870) | both sides, balanced and unbalanced | frame helpers only | no | FT1.2 framing (`media`) |
-| TLS | through iotsec, crypto/tls or an IEC 62351-3 profile (tested, TLS 1.2 and 1.3) | mbedtls 2.28 or 3.6 | crypto/tls | crypto/tls | no |
-| Secure authentication (IEC 62351-5 / TS 60870-5-7) | yes, both roles | an add-on module, not in the open source release | no | no | no |
+| IEC 104 controlling and controlled station | both (both tested against lib60870) | both | both | both, as wrappers over go-iecp5 | an IEC 104 session layer (`session.TCP`) and the iecat tool |
+| IEC 101 link | both sides, balanced and unbalanced, 0 to 2 octet link addresses (all tested against lib60870) | both sides, balanced and unbalanced | frame helpers only | no | FT1.2 framing (`media`) |
+| TLS | through iotsec, crypto/tls or an IEC 62351-3 profile (tested, TLS 1.2 and 1.3, refusals included) | mbedtls 2.28 or 3.6 | crypto/tls | crypto/tls | no |
+| Secure authentication (IEC 62351-5 / TS 60870-5-7) | yes, both roles (own test vectors; no independent peer exists, see below) | an add-on module, not in the open source release | no | no | no |
 | Commands with select-before-operate, termination wait, late confirmations | yes (`Commander`, `Operate`) | building blocks; the application sequences them | building blocks | a generic command send; the caller sequences select and execute | building blocks |
-| File transfer | both directions | a file service on the controlled station | a stub | no | no |
-| Redundancy groups | link primitives; policy is the application's | yes, server redundancy groups | no | no | no |
+| File transfer | both directions, both roles (controlling station tested against lib60870's file service over IEC 104 and IEC 101) | a file service on the controlled station (no call of the directory); no controlling-station side | a stub | no | no |
+| Redundancy groups | controlling side primitives; controlled side `cs104.Group` and `cs104.Server` (tested against lib60870 both ways) | yes, server redundancy groups | no | no | no |
 | Simulated stations for tests | yes ([iec60870-sim](https://github.com/cB-Sigma/iec60870-sim)) | example programs | example programs | test programs | command-line tool |
 
 Pick this module for a Go program that needs IEC 101 as well as 104,
-secure authentication, file transfer, or a permissive licence. Pick
-lib60870 for C, for an embedded target, or when you want server
-redundancy groups ready-made, and can work with the GPL or buy its
-commercial licence. go-iecp5 and wendy512/iec104 are smaller IEC 104
+secure authentication, file transfer, redundancy groups, or a permissive
+licence. Pick lib60870 for C or an embedded target, and when you can
+work with the GPL or buy its commercial licence. go-iecp5 and wendy512/iec104 are smaller IEC 104
 only libraries; check the LGPL obligations of go-iecp5 (also under
 wendy512/iec104) for a statically linked Go binary.
 
@@ -122,10 +122,10 @@ API reference: https://pkg.go.dev/github.com/cB-Sigma/iec60870
 | Package | What it does |
 |---|---|
 | `iec60870` (module root) | ASDUs and information objects (`ASDU`, `Object`, `Params`, `DecodeASDU`), qualifiers and time tags; station procedures (`Read`, `DelayAcquisition`, `CallDirectory`, `GetFile`, `QueryLog`, `PutFile` on a `Peer`); `FileServer` for controlled stations; `Commander` (one request at a time, confirmation and termination waits, `Operate` with select-before-operate, `Cancel`) and `LateConfirmations` |
-| `cs104` | APCI framing, I-frame numbering and acknowledgement, k and w, t0 to t3, STARTDT/STOPDT/TESTFR; `Dial`, `DialStandby`, `Open`, `Start` (controlling station) and `Accept` (controlled station); `Client` (a controlling station's session: data, commands, procedures) |
-| `cs101` | FT1.2 frames; `Link` (controlling station: link start-up, polling of class 1 and 2, confirmed and unconfirmed user data, busy and FC14/FC15 handling, balanced or unbalanced); `Secondary` (controlled station: unbalanced secondary or balanced station B with class 1/2 queues); `Port` over a serial port (`OpenSerial`) or a TCP connection to a converter |
+| `cs104` | APCI framing, I-frame numbering and acknowledgement, k and w, t0 to t3, STARTDT/STOPDT/TESTFR; `Dial`, `DialStandby`, `Open`, `Start` (controlling station) and `Accept` (controlled station); `Client` (a controlling station's session: data, commands, procedures); `Group` and `Server` (a controlled station's redundancy groups) |
+| `cs101` | FT1.2 frames; `Link` (controlling station: link start-up, polling of class 1 and 2, confirmed and unconfirmed user data, busy and FC14/FC15 handling, balanced or unbalanced); `Secondary` (controlled station: unbalanced secondary or balanced station B with class 1/2 queues); `Client` (a controlling station's session with one station, like `cs104.Client`); `Port` over a serial port (`OpenSerial`) or a TCP connection to a converter |
 | `sec` | IEC TS 60870-5-7 with IEC 62351-5:2023: security ASDUs and segmentation, Station Association (ECDH on secp256r1, secp256k1, Curve25519, Curve448 or brainpoolP256r1; HKDF), Session Key Change (AES-256 key wrap), Secure Data (HMAC-SHA-256, HMAC-SHA3-256, BLAKE2s or AES-256-GCM), both roles' state machines, the IEC 101 broadcast session key, the 29 statistics and their events, TS roles and permissions; `Endpoint` on raw ASDUs, `SecureLink` on the connections of an association |
-| `interop` (nested module, tests only) | this module's controlling station against lib60870 in Docker |
+| `interop` (nested module, tests only) | this module's controlling and controlled stations against lib60870 in Docker |
 
 ## Testing
 
@@ -155,36 +155,67 @@ cd interop && SIGMA_IEC60870_INTEROP=1 go test -v ./...
 
 ### Interop tested against
 
-lib60870-C v2.4.1 (GPLv3, mbedtls 3.6.6), built from source in Docker,
-on 2026-10-11. The other direction (lib60870 as controlling station
-against our controlled stations) is in iec60870-sim.
+lib60870-C v2.4.1 (GPLv3, mbedtls 3.6.6), built from source in Docker.
+v0.1.0 was tested on 2026-10-11; the rows marked v0.2.0 were added and
+run on 2026-10-11 against the same build. All passed. Values, qualities
+and time tags are compared field by field: lib60870's side prints what
+its own getters read (the time tag field by field and as octets), ours
+is what our decoder returns.
 
-- `cs104.Client` against a lib60870 controlled station (our peer
-  program): station interrogation (M_SP_NA_1, M_ME_NC_1, activation
-  confirmation and termination), spontaneous M_ME_NC_1, clock
-  synchronisation (the station received the time to the millisecond),
-  C_SC_NA_1 select-before-operate, C_DC_NA_1 direct execute and
-  C_SE_NC_1 select-before-operate, each confirmed and terminated. Passed.
-- The same over TLS 1.2 (ECDHE-ECDSA-AES-256-GCM) and TLS 1.3 with
-  mutual certificate authentication, crypto/tls against mbedtls. Passed.
-- lib60870's own cs104_server example: station interrogation with
-  sequences of elements (SQ=1), scaled values and a bitstring, periodic
-  data, clock synchronisation, a single command with select and execute
-  confirmed without termination, and a negative confirmation for an
-  unknown object. Passed.
-- `cs101.Link` (unbalanced, one-octet link address, COT and CA,
-  two-octet IOA) against a lib60870 unbalanced secondary on a pty bridged
-  to TCP by socat: link start-up, station interrogation polled through
-  class 1 and 2, clock synchronisation, C_SC_NA_1 select-before-operate
-  with termination, a spontaneous value as class 1 data. Passed.
-- Not tested against a reference: the A-Profile (lib60870's secure
-  authentication is not in its open source release), IEC 101 balanced
-  mode, file transfer, redundancy switchover, real serial hardware.
+| Area | What ran | Version |
+|---|---|---|
+| IEC 104, our controlling station | `cs104.Client` against our lib60870 peer program: station and group interrogation, spontaneous data, clock synchronisation, C_SC_NA_1, C_DC_NA_1 and C_SE_NC_1 with and without select | v0.1.0 |
+| | lib60870's own cs104_server example: sequences (SQ=1), scaled values, a bitstring, periodic data, a command confirmed without termination, a refusal for an unknown object | v0.1.0 |
+| Monitor types, lib60870 to us | every type 1 to 21 and 30 to 40 plus M_EI_NA_1, one object each, with quality bits (IV, NT, SB, BL, OV; CY, CA, IV of counters; EI of protection events), CP24Time2a and CP56Time2a tags with IV and RES1, elapsed times, transient steps, counter sequence numbers, status change detection; sequences of 5 and 40 objects; SU in a zone with summer time (Europe/Berlin) | v0.2.0 |
+| Monitor types, us to lib60870 | the same set encoded by us (from `cs104.Group` over IEC 104 and from `cs101.Secondary` over IEC 101) and read by lib60870 | v0.2.0 |
+| Commands, us to lib60870 | C_SC, C_DC, C_RC, C_SE (normalised, scaled, float), C_BO, each with and without CP56Time2a (45 to 51, 58 to 64), select and execute, qualifier (QU/QL), deactivation of a select, refusal of an unknown object | v0.2.0 |
+| Commands, lib60870 to us | the same types sent by lib60870 to `cs104.Server`/`cs104.Group` and to `cs101.Secondary`, decoded value, S/E, qualifier and time tag | v0.2.0 |
+| System commands | C_IC (station, group), C_CI (read), C_RD (known and unknown object), C_RP (positive and negative), C_TS_TA_1 (counter and time mirrored), C_CD_NA_1 (activation and the delay loaded with cause 3), P_ME_NA/NB/NC, P_AC, both directions; C_TS_NA_1 over IEC 101 | v0.2.0 |
+| Clock synchronisation | ours read by lib60870 field by field: 2099-12-31 23:59:59.999, 2000-01-01, 28 February and a leap day, day of week 7, SU sent as zero from a zone in summer time; a negative confirmation; lib60870's read by us: SU set (ignored), IV set, a wrong day of week, 59 999 ms, year 00 | v0.2.0 |
+| File transfer | `GetFile` of a three-section file from lib60870's file service, an unknown file refused, `PutFile` of 70 000 octets (two sections) into it, over IEC 104; the same over IEC 101, balanced and unbalanced | v0.2.0 |
+| Redundancy | against lib60870 in single-group and multiple-group (catch-all) modes: `DialStandby` plus `StartDT` closes the started connection, what it sent without acknowledgement arrives again on the standby, what was queued during `StopDT` arrives on the next start; one group per connection: both started connections receive the data | v0.2.0 |
+| Our redundancy groups | lib60870 as controlling station against `cs104.Server` with one `cs104.Group` (interrogation, commands, clock, monitor types) | v0.2.0 |
+| TLS | TLS 1.2 (ECDHE-ECDSA-AES-256-GCM) and 1.3 with mutual authentication | v0.1.0 |
+| | refused: no client certificate (1.2 and 1.3), a client certificate from an untrusted CA, a station certificate we do not trust | v0.2.0 |
+| | lib60870 (mbedtls) as TLS 1.2 and 1.3 client against `cs104.Server` on a crypto/tls listener requiring client certificates: interrogation, a time-tagged command, a monitor type; lib60870 with a certificate from an untrusted CA refused | v0.2.0 |
+| IEC 101 | `cs101.Link` unbalanced against lib60870's secondary on a pty bridged by socat: start-up, polling, interrogation, clock, select-before-operate, spontaneous data | v0.1.0 |
+| | `cs101.Link` and `cs101.Client`, unbalanced and balanced, link address 0, 1 and 2 octets, cause 1 and 2 octets (originator address checked), common address 1 and 2, object address 1, 2 and 3: interrogation, clock, commands, every monitor type | v0.2.0 |
+| | lib60870's controlling station, unbalanced and balanced, the same sizes, against `cs101.Secondary` | v0.2.0 |
 
-No interoperability defect was found in this module. One lib60870 note
-for users: it compares every certificate key's bit length with one
-minimum (1024 by default), so a P-256 certificate is refused unless the
-minimum is lowered (`TLSConfiguration_setMinimumKeyLength`).
+Found and fixed by these runs (v0.2.0): `cs101.Secondary` ignored every
+frame on a balanced line without a link address field (it compared the
+missing address with its own); a 240-octet file segment failed over IEC
+101 because `Encode` stops at the IEC 104 limit of 249 octets
+(`EncodeMax` now takes the link's limit, used by `cs101.Client`); and IEC
+101 frames now refuse user data longer than their length octet allows
+instead of writing a wrapped length.
+
+Differences to know, not defects of either side:
+
+- lib60870 numbers the objects of an M_PS_NA_1 sequence one apart and
+  refuses other steps; our decoder follows Amendment 1 (16 apart) unless
+  `Params.PackedStep` is 1.
+- lib60870's file service does not answer the call of the directory, so
+  `CallDirectory` is not tested against it.
+- lib60870 compares every certificate key's bit length with one minimum
+  (1024 by default), so a P-256 certificate is refused unless the
+  minimum is lowered (`TLSConfiguration_setMinimumKeyLength`).
+
+Not tested against an independent implementation:
+
+- The IEC 62351-5 / TS 60870-5-7 A-Profile. lib60870's secure
+  authentication is a commercial add-on. On 2026-10-11 the web and
+  GitHub (repositories naming 60870-5-7 or 62351-5) were searched for an
+  open implementation under a usable licence; none was found, only
+  commercial source libraries. Wireshark's IEC 104 dissector knows the
+  type numbers of the 2013 edition, whose messages differ from TS
+  60870-5-7:2025, so it cannot check ours either. The package is tested with our
+  own vectors written from the message figures of TS 60870-5-7 and IEC
+  62351-5 and RFC vectors for the primitives (`sec/`); those are own
+  vectors, not independent.
+- Our `FileServer` (the controlled station's file service) and
+  `CallDirectory`: lib60870 has no controlling-station file service.
+- Real serial hardware (the IEC 101 runs use a pty and socat).
 
 ## Related repositories
 

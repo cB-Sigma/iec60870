@@ -35,6 +35,59 @@ const cp56At = "2a760f0a98091a"
 
 var at = time.Date(2026, 9, 24, 10, 15, 30, 250e6, time.UTC)
 
+// An IEC 101 frame carries up to 255 − 1 − link address octets of ASDU,
+// more than an IEC 104 APDU (249): EncodeMax takes the link's limit, up
+// to MaxFrameASDU, while Encode keeps the IEC 104 limit (found with a
+// file segment of 240 octets refused over IEC 101 against lib60870
+// 2.4.1).
+//
+// Covers: SIG-IPE-1334
+func TestEncodeIEC101Lengths(t *testing.T) {
+	seg := func(n int) *iec60870.ASDU {
+		return &iec60870.ASDU{Type: iec60870.FSgNa1, Cause: iec60870.CauseFile, CA: 1,
+			Objects: []iec60870.Object{{IOA: 1, File: 1, Section: 1, Segment: make([]byte, n)}}}
+	}
+	if _, err := seg(243).Encode(p101, time.UTC); err == nil {
+		t.Error("Encode took a 253-octet ASDU (IEC 104 limit 249)")
+	}
+	if b, err := seg(243).EncodeMax(p101, time.UTC, 253); err != nil || len(b) != 253 {
+		t.Errorf("a 253-octet ASDU: %d octets, %v", len(b), err)
+	}
+	if _, err := seg(243).EncodeMax(p101, time.UTC, 252); err == nil {
+		t.Error("a 253-octet ASDU fit a limit of 252")
+	}
+	if _, err := seg(245).EncodeMax(p101, time.UTC, 300); err == nil {
+		t.Error("a 255-octet ASDU was encoded")
+	}
+}
+
+// Covers: SIG-IPE-1320
+func TestPackedSequenceStep(t *testing.T) {
+	// The same sequence of two M_PS_NA_1 objects at address 16: object 2 is
+	// at 32 under Amendment 1, at 17 for stations that count objects
+	// (lib60870 2.4.1 encodes and decodes so).
+	b := unhex(t, "14 82 03 07 1000 0201 0100 80 ffff 0000 10")
+	for _, x := range []struct {
+		step int
+		want uint32
+	}{{0, 32}, {16, 32}, {1, 17}} {
+		p := p101
+		p.PackedStep = x.step
+		a, err := iec60870.DecodeASDU(b, p, time.UTC)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a.Objects[1].IOA != x.want {
+			t.Errorf("PackedStep %d: second object at %d, want %d", x.step, a.Objects[1].IOA, x.want)
+		}
+	}
+	p := p101
+	p.PackedStep = 2
+	if err := p.Validate(); err == nil {
+		t.Error("a packed step of 2 was accepted")
+	}
+}
+
 // Covers: SIG-IPE-1320
 func TestCodec101Figures(t *testing.T) {
 	now := at.Add(10 * time.Second) // completes the CP24Time2a tags

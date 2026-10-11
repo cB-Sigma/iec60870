@@ -5,6 +5,7 @@ package cs104
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cB-Sigma/iec60870"
@@ -135,6 +136,39 @@ func (c *Client) Cancel(ctx context.Context, t iec60870.TypeID, sel iec60870.Obj
 func (c *Client) Interrogate(ctx context.Context, qoi uint8, wait time.Duration) error {
 	return c.Request(ctx, iec60870.Request{Type: iec60870.CIcNa1, Cause: iec60870.CauseActivation,
 		Object: iec60870.Object{Value: float64(qoi)}, Termination: wait})
+}
+
+// CounterInterrogate runs a counter interrogation with qualifier qcc (see
+// iec60870.QCC). A read (FRZ 0) waits up to wait for its activation
+// termination, the totals (cause 37 to 41) arriving through OnData; a
+// freeze or reset is done on its confirmation.
+func (c *Client) CounterInterrogate(ctx context.Context, qcc uint8, wait time.Duration) error {
+	if _, frz := iec60870.SplitQCC(qcc); frz != iec60870.FRZRead {
+		wait = 0
+	}
+	return c.Request(ctx, iec60870.Request{Type: iec60870.CCiNa1, Cause: iec60870.CauseActivation,
+		Object: iec60870.Object{Value: float64(qcc)}, Termination: wait})
+}
+
+// ResetProcess sends a reset process command with qualifier qrp (see
+// iec60870.QRPGeneral) and waits for its confirmation.
+func (c *Client) ResetProcess(ctx context.Context, qrp uint8) error {
+	return c.Request(ctx, iec60870.Request{Type: iec60870.CRpNa1, Cause: iec60870.CauseActivation,
+		Object: iec60870.Object{Value: float64(qrp)}})
+}
+
+// Test sends a test command with time tag (C_TS_TA_1, IEC 60870-5-104
+// clause 8.8) carrying counter and now; the confirmation must mirror the
+// counter.
+func (c *Client) Test(ctx context.Context, counter uint16, now time.Time) error {
+	return c.Request(ctx, iec60870.Request{Type: iec60870.CTsTa1, Cause: iec60870.CauseActivation,
+		Object: iec60870.Object{Value: float64(counter), Time: now}, Untracked: true,
+		Check: func(a *iec60870.ASDU) error {
+			if len(a.Objects) != 1 || a.Objects[0].Value != float64(counter) {
+				return fmt.Errorf("the test command was confirmed with another counter (%v, sent %d)", a.Objects, counter)
+			}
+			return nil
+		}})
 }
 
 // ClockSync sends a clock synchronisation with time now.

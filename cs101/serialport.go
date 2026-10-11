@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/goburrow/serial"
@@ -12,7 +13,58 @@ import (
 // OpenSerial opens a local serial port for FT1.2 with eight data bits, one
 // stop bit and parity "E" (the FT1.2 default), "N" or "O".
 func OpenSerial(dev string, baud int, parity string) (io.ReadWriteCloser, error) {
-	return serial.Open(&serial.Config{Address: dev, BaudRate: baud, DataBits: 8, StopBits: 1, Parity: parity, Timeout: 100 * time.Millisecond})
+	p, err := serial.Open(&serial.Config{Address: dev, BaudRate: baud, DataBits: 8, StopBits: 1, Parity: parity, Timeout: 100 * time.Millisecond})
+	if err != nil {
+		return nil, err
+	}
+	return guard(p), nil
+}
+
+// guarded serialises Close with the reads and writes in progress: the
+// serial package's Close changes the descriptor its Read uses without a
+// lock. Read and Write share the lock; Close marks the port closed and
+// waits for the read in progress, which its read timeout bounds.
+type guarded struct {
+	rw     io.ReadWriteCloser
+	mu     sync.RWMutex
+	closed atomic.Bool
+}
+
+func guard(rw io.ReadWriteCloser) io.ReadWriteCloser { return &guarded{rw: rw} }
+
+var errPortClosed = errors.New("the serial port is closed")
+
+func (g *guarded) Read(b []byte) (int, error) {
+	if g.closed.Load() {
+		return 0, errPortClosed
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if g.closed.Load() {
+		return 0, errPortClosed
+	}
+	return g.rw.Read(b)
+}
+
+func (g *guarded) Write(b []byte) (int, error) {
+	if g.closed.Load() {
+		return 0, errPortClosed
+	}
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if g.closed.Load() {
+		return 0, errPortClosed
+	}
+	return g.rw.Write(b)
+}
+
+func (g *guarded) Close() error {
+	if g.closed.Swap(true) {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.rw.Close()
 }
 
 // Port turns a byte stream into ReadByte calls with a deadline. A reader

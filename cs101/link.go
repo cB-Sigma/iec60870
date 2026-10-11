@@ -168,6 +168,9 @@ var ErrBusy = errors.New("the station's link stays busy (DFC)")
 // repeating it (with the same FCB) after a timeout. fcv requests carry
 // the alternating frame count bit.
 func (l *Link) Request(ctx context.Context, addr uint16, fn byte, fcv bool, asdu []byte) (Frame, error) {
+	if err := checkLength(asdu, l.asize); err != nil {
+		return Frame{}, err
+	}
 	l.reqMu.Lock()
 	defer l.reqMu.Unlock()
 	c := CtrlPRM | fn
@@ -364,9 +367,26 @@ const MaxFrame = 255 + 6
 // SendNoReply sends user data with send/no reply (FC4), as to the
 // broadcast address (6.2.1.1: only this service is broadcast).
 func (l *Link) SendNoReply(addr uint16, asdu []byte) error {
+	if err := checkLength(asdu, l.asize); err != nil {
+		return err
+	}
 	l.reqMu.Lock()
 	defer l.reqMu.Unlock()
 	return l.write(Frame{C: CtrlPRM | FnUserDataNoReply, Addr: addr, ASDU: asdu})
+}
+
+// ErrTooLong is returned for user data longer than a frame carries.
+var ErrTooLong = errors.New("the ASDU does not fit an FT1.2 frame")
+
+// MaxASDU is the most ASDU octets a frame carries with an asize-octet
+// link address: MaxUserData less the control and address octets.
+func MaxASDU(asize int) int { return MaxUserData - 1 - asize }
+
+func checkLength(asdu []byte, asize int) error {
+	if len(asdu) > MaxASDU(asize) {
+		return fmt.Errorf("%w (%d octets, at most %d)", ErrTooLong, len(asdu), MaxASDU(asize))
+	}
+	return nil
 }
 
 // BroadcastAddr is the link broadcast address: all ones (6.2.1.1).

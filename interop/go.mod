@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/cB-Sigma/iotcrypto v0.1.1 // indirect
+	github.com/cB-Sigma/iotcrypto v0.1.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/goburrow/serial v0.1.0 // indirect

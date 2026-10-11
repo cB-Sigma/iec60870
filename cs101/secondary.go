@@ -200,6 +200,9 @@ func (c *Secondary) Send(ctx context.Context, b []byte) error {
 }
 
 func (c *Secondary) queue(ctx context.Context, b, orig []byte) error {
+	if err := checkLength(b, c.cfg.AddrSize); err != nil {
+		return err
+	}
 	for {
 		c.mu.Lock()
 		if len(c.class1)+len(c.class2) < classLimit {
@@ -299,7 +302,8 @@ func (c *Secondary) Run(ctx context.Context) error {
 			continue
 		}
 		bcast := c.cfg.AddrSize > 0 && f.Addr == uint16(1)<<(8*c.cfg.AddrSize)-1
-		if f.Addr != c.cfg.LinkAddress && !bcast {
+		// Without an address field (balanced, 0 octets) every frame is ours.
+		if c.cfg.AddrSize > 0 && f.Addr != c.cfg.LinkAddress && !bcast {
 			continue // another station on a party line
 		}
 		if bcast {

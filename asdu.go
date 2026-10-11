@@ -10,10 +10,15 @@ import (
 	"time"
 )
 
-// MaxASDU is the largest ASDU this package encodes: what an IEC 104 APDU
-// carries (253 octets less the 4 control octets). An IEC 101 frame carries
-// fewer (255 less the control and address octets).
+// MaxASDU is the largest ASDU Encode produces: what an IEC 104 APDU
+// carries (253 octets less the 4 control octets). IEC 101 frames carry up
+// to 255 less the control and address octets (see EncodeMax).
 const MaxASDU = 249
+
+// MaxFrameASDU is the largest ASDU EncodeMax produces: what an IEC 101 frame
+// without a link address field carries (L at most 255, less the control
+// octet).
+const MaxFrameASDU = 254
 
 // TypeID identifies an ASDU's information object type (IEC 60870-5-101
 // clause 7.2.1, reused by 104).
@@ -261,6 +266,12 @@ type Params struct {
 	CASize     int   // 1 or 2 (default 2)
 	IOASize    int   // 1, 2 or 3 (default 3)
 	Originator uint8 // our originator address, sent when COTSize is 2
+	// PackedStep is the address step between the objects of a packed
+	// single-point sequence (M_PS_NA_1 with SQ=1): 0 or 16 follows
+	// Amendment 1 (7.3.1.20: one address per status bit); 1 counts the
+	// objects, as lib60870 2.4.1 and some stations do. Other values are
+	// invalid.
+	PackedStep int
 }
 
 // WithDefaults fills zero sizes with the IEC 60870-5-104 values.
@@ -287,6 +298,9 @@ func (p Params) Validate() error {
 	}
 	if p.IOASize < 1 || p.IOASize > 3 {
 		return fmt.Errorf("information object address size %d is not 1, 2 or 3", p.IOASize)
+	}
+	if p.PackedStep != 0 && p.PackedStep != 1 && p.PackedStep != 16 {
+		return fmt.Errorf("packed single-point step %d is not 1 or 16", p.PackedStep)
 	}
 	return nil
 }
@@ -408,9 +422,9 @@ var ErrUnsupportedType = errors.New("unsupported type identification")
 
 // seqStep is the address step between the objects of a sequence (SQ=1):
 // one, but sixteen for packed single points, whose object j carries
-// the points from A+16(j−1) (Amendment 1, 7.3.1.20).
-func seqStep(t TypeID) uint32 {
-	if t == MPsNa1 {
+// the points from A+16(j−1) (Amendment 1, 7.3.1.20), unless p asks for one.
+func seqStep(t TypeID, p Params) uint32 {
+	if t == MPsNa1 && p.PackedStep != 1 {
 		return 16
 	}
 	return 1
@@ -418,6 +432,14 @@ func seqStep(t TypeID) uint32 {
 
 // Encode serialises the ASDU. loc is the time zone of time tags.
 func (a *ASDU) Encode(p Params, loc *time.Location) ([]byte, error) {
+	return a.EncodeMax(p, loc, MaxASDU)
+}
+
+// EncodeMax is Encode for a link that carries ASDUs of up to max octets
+// (at most MaxFrameASDU): an IEC 101 frame takes up to 255 less its
+// control and address octets, more than an IEC 104 APDU.
+func (a *ASDU) EncodeMax(p Params, loc *time.Location, max int) ([]byte, error) {
+	max = min(max, MaxFrameASDU)
 	sh, ok := shapes[a.Type]
 	if !ok {
 		return nil, fmt.Errorf("%w %d", ErrUnsupportedType, a.Type)
@@ -479,8 +501,8 @@ func (a *ASDU) Encode(p Params, loc *time.Location) ([]byte, error) {
 			b = append(b, cp56(o.Time, o.TimeInvalid, o.TimeSubstituted, su, loc)...)
 		}
 	}
-	if len(b) > MaxASDU {
-		return nil, fmt.Errorf("the ASDU is %d bytes; at most %d fit in an APDU", len(b), MaxASDU)
+	if len(b) > max {
+		return nil, fmt.Errorf("the ASDU is %d bytes; at most %d fit in a frame", len(b), max)
 	}
 	return b, nil
 }
@@ -721,7 +743,7 @@ func DecodeASDUAt(b []byte, p Params, loc *time.Location, now time.Time) (*ASDU,
 			}
 			i += p.IOASize
 		} else {
-			ioa += seqStep(a.Type)
+			ioa += seqStep(a.Type, p)
 		}
 		o := decodeElement(a.Type, b[i:i+sh.size])
 		o.IOA = ioa

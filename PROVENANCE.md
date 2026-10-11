@@ -26,7 +26,16 @@ command procedure (`command.go`, `Commander`), `cs104.Client` and
 `cs101.Secondary` were written or lifted out of the integrations then.
 On 2026-10-11 the simulators, their commands and the tests that drive
 them moved to the separate module iec60870-sim, and the lib60870 interop
-tests (interop/) were added.
+tests (interop/) were added. Later the same day (v0.2.0) the interop
+tests were extended to every common type in both directions, file
+transfer, redundancy, TLS refusals and the IEC 101 sizes and modes;
+`cs104.Group` and `cs104.Server` (a controlled station's redundancy
+groups), `cs101.Client`, the `cs104.Client` helpers for counter
+interrogation, reset and test, and `Params.PackedStep` were written from
+the standards named below, three defects those runs found were fixed,
+and a data race on closing a serial port (reported from the dnp3
+library, which uses the same serial package) was fixed (see
+CHANGELOG.md).
 
 ## Notes on open readings (F- numbers)
 
@@ -58,7 +67,9 @@ its numbers. Each is explained here in our words:
 | IEC 101 link (cs101/ft12.go, cs101/link.go, cs101/secondary.go, cs101/serialport.go) | IEC 60870-5-1 (FT1.2 frames), IEC 60870-5-2 (link transmission procedures) as IEC 60870-5-101 clause 6 profiles them (Figures 3 to 9, the 6.2.2 time-out interval, broadcast address) | github.com/goburrow/serial is a dependency, not a source |
 | TLS (cs104, through iotsec) | IEC 62351-3 for what a link must allow a profile to do (keepalive before a timed key update); the profile itself is the application's | none |
 | Security extension (sec/) | IEC TS 60870-5-7:2025 (A-Profile message formats, types 81 to 89 and 91, causes 14 to 17, segmentation, Session Initiation Request, IEC 101 broadcast session key, statistics, RBAC permissions of clause 8, parameters of clause 9, T-Profile port); IEC 62351-5:2023 clause 8 (state machines, HKDF inputs, MAC inputs, AEAD parameters); IEC 62351-8 (roles, through iotsec.CertificateRoleAuthority); RFC 3394 (AES key wrap), RFC 5869 (HKDF), RFC 2104 and RFC 4231 (HMAC), RFC 7693 (BLAKE2s), RFC 7748 (X25519, X448), RFC 5639 and RFC 7027 (brainpool) | none |
-| Interop peer (interop/peer) | lib60870-C v2.4.1's public API headers and example programs, read to write our peer program | the peer program is ours; lib60870 is built from its own sources in the test container |
+| Interop peer (interop/peer) | lib60870-C v2.4.1's public API headers and example programs, read to write our peer program; on 2026-10-11 also its file service, IEC 104 controlled-station dispatch, FT1.2 link layer and mbedtls configuration sources, read to learn how the test peer behaves (no code taken) | the peer program is ours; lib60870 is built from its own sources in the test container |
+| Redundancy groups (cs104/group.go) | IEC 60870-5-104 clause 10 (redundant connections, Figure 36, 10.6 and 10.7) | none |
+| IEC 101 client (cs101/client.go) | IEC 60870-5-101 clause 7.4 and 6.2 (as for the link and the procedures) | none |
 
 ## Other IEC 60870-5 implementations
 
@@ -78,7 +89,13 @@ needed; these notes are the record.
 
 On 2026-10-11 lib60870 was used as an independent test peer (interop/):
 its public headers and examples were read to write the peer program,
-after the library code existed. go-iecp5 v1.2.1, wendy512/iec104 v1.0.4
+after the library code existed. For v0.2.0 some of its source files were
+read as well (named in the table above), to make the peer exercise its
+file service, redundancy groups and link layer and to understand test
+failures. The library changes of v0.2.0 come from those failures and
+from the standards; `Params.PackedStep` exists because lib60870 numbers
+packed single-point sequences differently, which the interop test
+showed. go-iecp5 v1.2.1, wendy512/iec104 v1.0.4
 and part5 were read for the comparison in README.md only.
 
 ## Test vectors and where they come from
@@ -92,7 +109,8 @@ and part5 were read for the comparison in README.md only.
 | sec/crypto_test.go | RFC 3394, RFC 4231, RFC 5869 and RFC 7693 test vectors |
 | sec/cert_test.go, sec/brainpool_test.go | RFC 7748 (X25519, X448) and RFC 7027 (brainpoolP256r1) |
 | fuzz tests (cs104/fuzz_test.go, cs101/fuzz_test.go) | random input from hand-written seed frames |
-| interop/ | lib60870-C v2.4.1 as controlled station (IEC 104, with and without TLS, and IEC 101 unbalanced) |
+| interop/ | lib60870-C v2.4.1 as controlled and as controlling station (IEC 104 with and without TLS, IEC 101 balanced and unbalanced with every field size); the expected values in the tests are our own choices, checked against what lib60870's getters and our decoder read |
+| sec/ (all) | own vectors from the TS 60870-5-7 and IEC 62351-5 message figures, plus RFC vectors for the primitives; no independent A-Profile implementation was available to test against (see README.md) |
 | every other test and the examples | the links and endpoints of this module against each other, written from the same standards; not a real device |
 
 All keys, certificates and addresses in the tests are made-up demo

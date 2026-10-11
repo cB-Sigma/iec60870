@@ -1,8 +1,9 @@
 // Copyright 2026 Abhinav Gautam
 // SPDX-License-Identifier: Apache-2.0
 
-// Package interop runs this module's controlling station (IEC 104 client
-// and IEC 101 primary link) against lib60870-C v2.4.1
+// Package interop runs this module's controlling stations (IEC 104 and
+// IEC 101) and controlled stations (cs104.Server, cs101.Secondary)
+// against lib60870-C v2.4.1
 // (github.com/mz-automation/lib60870, GPLv3, used only as a test peer in a
 // container built from ./peer). The tests are skipped unless
 // SIGMA_IEC60870_INTEROP=1 is set and Docker is running.
